@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HDMI Capture via USB</title>
+  <style>
+    video {
+      width: 100%;
+      max-width: 720px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+<body>
+  <h1>HDMI Capture via USB</h1>
+  <video id="video" autoplay muted></video>
+  <div>
+    <button id="start">Start HDMI Capture</button>
+    <button id="stop" disabled>Stop Capture & Download</button>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('video');
+    const startButton = document.getElementById('start');
+    const stopButton = document.getElementById('stop');
+
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    startButton.addEventListener('click', async () => {
+      try {
+        // HDMIキャプチャデバイスを選択
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: await getHDMIDeviceId() // HDMIキャプチャデバイスを特定
+          },
+          audio: false // 必要ならtrueにして音声を追加
+        });
+
+        videoElement.srcObject = stream;
+
+        // MediaRecorderで録画準備
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'hdmi-capture.webm';
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+        };
+
+        mediaRecorder.start();
+
+        startButton.disabled = true;
+        stopButton.disabled = false;
+      } catch (error) {
+        console.error('Error accessing HDMI device:', error);
+      }
+    });
+
+    stopButton.addEventListener('click', () => {
+      mediaRecorder.stop();
+      startButton.disabled = false;
+      stopButton.disabled = true;
+
+      // ストリームの停止
+      const tracks = videoElement.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+    });
+
+    async function getHDMIDeviceId() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInput = devices.find(device => device.kind === 'videoinput' && device.label.toLowerCase().includes('hdmi'));
+      if (!videoInput) {
+        throw new Error('HDMI capture device not found!');
+      }
+      return videoInput.deviceId;
+    }
+  </script>
+</body>
+</html>
